@@ -35,7 +35,7 @@ let isMusicPaused = false;
 function validateNumberInput(input) {
     // السماح بالأرقام والنقطة فقط
     input.value = input.value.replace(/[^0-9.]/g, '');
-    
+
     // السماح بنقطة واحدة فقط
     const dots = input.value.split('.').length - 1;
     if (dots > 1) {
@@ -53,7 +53,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('amount').addEventListener('input', function () {
         // فقط التحقق من المدخلات
         validateNumberInput(this);
-        
+
         // ⚠️ لا تحويل تلقائي هنا
     });
 
@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // حدث زر الإيقاف المؤقت/التشغيل
     const pauseBtn = document.getElementById('pause-music');
     if (pauseBtn) {
-        pauseBtn.addEventListener('click', function() {
+        pauseBtn.addEventListener('click', function () {
             if (!isMusicPlaying || isMusicPaused) {
                 // إذا الأغنية متوقفة أو موقوفة مؤقتاً، شغلها
                 revolutionSong.play();
@@ -154,7 +154,7 @@ function convertCurrency() {
 
     let result = conversionDirection === 'oldToNew' ? amount / 100 : amount * 100;
     showResult(result);
-    
+
     // 🎵 تشغيل الأغنية تلقائياً عند الضغط على زر التحويل
     playRevolutionSong();
 }
@@ -297,27 +297,143 @@ function showError(message) {
         resultText.textContent = conversionDirection === 'oldToNew' ? 'ليرة سورية جديدة' : 'ليرة سورية قديمة';
     }, 2000);
 }
-
-// تشغيل أغنية الثورة
+// 🎵 تشغيل أغنية الثورة (معدل للـ iOS)
 function playRevolutionSong() {
     try {
-        // إذا كانت الأغنية موقوفة مؤقتاً، استئناف التشغيل
+        // 🔧 الحل المضمون للـ iPhone
         if (isMusicPaused) {
-            revolutionSong.play();
-            isMusicPaused = false;
+            // إذا كانت موقوفة مؤقتاً، استأنف
+            const playPromise = revolutionSong.play();
+
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isMusicPlaying = true;
+                    isMusicPaused = false;
+                    updateMusicStatus();
+                }).catch(error => {
+                    console.log("iOS يحتاج إذن:", error);
+                    handleIOSMusicPermission();
+                });
+            }
         } else {
-            // وإلا ابدأ من البداية
+            // إعادة التشغيل من البداية
             revolutionSong.currentTime = 0;
-            revolutionSong.play();
+
+            // 🔧 هذا الجزء مهم للـ iPhone
+            const playPromise = revolutionSong.play();
+
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    isMusicPlaying = true;
+                    isMusicPaused = false;
+                    updateMusicStatus();
+
+                    // 🔧 حفظ حالة التشغيل للجلسة
+                    localStorage.setItem('musicAutoplayAllowed', 'true');
+                }).catch(error => {
+                    console.log("iPhone لا يسمح بالتشغيل التلقائي:", error);
+
+                    // 🔧 طريقة خاصة للـ iPhone
+                    if (navigator.userAgent.match(/(iPhone|iPod|iPad)/i)) {
+                        handleIOSMusicPermission();
+                    }
+                });
+            }
         }
-        
-        isMusicPlaying = true;
-        updateMusicStatus();
     } catch (e) {
-        console.log("لا يمكن تشغيل الأغنية: " + e.message);
+        console.log("خطأ في تشغيل الأغنية:", e);
     }
 }
 
+// 🔧 معالجة إذن الصوت على iOS
+function handleIOSMusicPermission() {
+    // عرض رسالة واضحة للمستخدم
+    const permissionBox = document.createElement('div');
+    permissionBox.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: linear-gradient(135deg, rgba(255,107,53,0.95), rgba(232,67,147,0.95));
+        padding: 30px;
+        border-radius: 20px;
+        z-index: 9999;
+        text-align: center;
+        border: 3px solid gold;
+        box-shadow: 0 0 30px rgba(255,215,0,0.7);
+        max-width: 90%;
+        width: 400px;
+        backdrop-filter: blur(10px);
+    `;
+
+    permissionBox.innerHTML = `
+        <h3 style="color: white; margin-bottom: 15px;">
+            <i class="fas fa-music" style="margin-left: 10px;"></i>
+            السماح بتشغيل الصوت
+        </h3>
+        <p style="color: white; margin-bottom: 20px; line-height: 1.5;">
+            للاستمتاع بالأغنية الوطنية، يرجى الضغط على الزر أدناه للسماح بتشغيل الصوت
+        </p>
+        <button id="allow-music-btn" 
+                style="background: linear-gradient(45deg, #27AE60, #2ECC71);
+                       color: white;
+                       border: none;
+                       padding: 15px 30px;
+                       border-radius: 10px;
+                       font-size: 1.2rem;
+                       font-weight: bold;
+                       cursor: pointer;
+                       margin-bottom: 15px;">
+            <i class="fas fa-check-circle" style="margin-left: 10px;"></i>
+            السماح بتشغيل الصوت
+        </button>
+        <p style="color: #FFD700; font-size: 0.9rem;">
+            <i class="fas fa-info-circle"></i>
+            هذه رسالة من المتصفح لأسباب تقنية
+        </p>
+    `;
+
+    document.body.appendChild(permissionBox);
+
+    // إضافة حدث للزر
+    document.getElementById('allow-music-btn').addEventListener('click', function () {
+        // 🔧 هذا التفاعل المباشر هو ما يحتاجه iOS
+        revolutionSong.play().then(() => {
+            isMusicPlaying = true;
+            isMusicPaused = false;
+            updateMusicStatus();
+            permissionBox.remove();
+            localStorage.setItem('musicAutoplayAllowed', 'true');
+        }).catch(error => {
+            console.log("ما زال المستخدم لم يسمح:", error);
+            alert("يرجى السماح بتشغيل الصوت في إعدادات المتصفح");
+        });
+    });
+
+    // إغلاق الصندوق عند النقر خارجيه
+    permissionBox.addEventListener('click', function (e) {
+        if (e.target === permissionBox) {
+            permissionBox.remove();
+        }
+    });
+}
+
+// 🔧 في بداية تحميل الصفحة، تحقق من إذن iOS
+document.addEventListener('DOMContentLoaded', function () {
+    // إذا كان على iPhone ولم يُسمح بعد
+    if (navigator.userAgent.match(/(iPhone|iPod|iPad)/i) &&
+        !localStorage.getItem('musicAutoplayAllowed')) {
+
+        // استعد لطلب الإذن عند أول تفاعل
+        const requestPermission = function () {
+            // لا نطلب الإذن تلقائياً، بل ننتظر الضغط على زر التحويل
+            console.log("iPhone detected - waiting for user interaction");
+            document.removeEventListener('click', requestPermission);
+        };
+
+        document.addEventListener('click', requestPermission);
+    }
+});
 // تحديث حالة الأغنية
 function updateMusicStatus() {
     const musicStatus = document.getElementById('music-status');
@@ -333,7 +449,7 @@ function updateMusicStatus() {
         icon.className = 'fas fa-volume-up';
         icon.style.color = '#27AE60';
         text.textContent = 'الأغنية تشتغل الآن';
-        
+
         // تحديث زر الإيقاف المؤقت
         if (pauseBtn) {
             pauseBtn.innerHTML = '<i class="fas fa-pause"></i> إيقاف مؤقت';
@@ -343,7 +459,7 @@ function updateMusicStatus() {
         icon.className = 'fas fa-pause';
         icon.style.color = '#3498DB';
         text.textContent = 'الأغنية موقوفة مؤقتاً';
-        
+
         // تحديث زر التشغيل (بدلاً من الإيقاف)
         if (pauseBtn) {
             pauseBtn.innerHTML = '<i class="fas fa-play"></i> تشغيل';
@@ -353,7 +469,7 @@ function updateMusicStatus() {
         icon.className = 'fas fa-volume-mute';
         icon.style.color = '#E74C3C';
         text.textContent = 'الأغنية متوقفة';
-        
+
         // تحديث زر التشغيل
         if (pauseBtn) {
             pauseBtn.innerHTML = '<i class="fas fa-play"></i> تشغيل';
